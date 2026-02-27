@@ -1,32 +1,32 @@
 # gh pr-todo
 
-自分がまだ Approve していない未マージ PR 一覧を取得する [gh](https://cli.github.com/) extension。
+A [gh](https://cli.github.com/) extension that lists unmerged PRs you haven't approved yet.
 
-## インストール
+## Installation
 
 ```bash
 gh extension install <your-username>/gh-pr-todo
 ```
 
-## 使い方
+## Usage
 
 ```bash
 gh pr-todo
 ```
 
-これだけで、自分にレビュー依頼が来ている未 Approve の PR が一覧表示されます。
+This lists all unapproved PRs where you are requested as a reviewer.
 
-### 追加リポジトリを指定
+### Specify additional repositories
 
-レビュー依頼が来ていないリポジトリも監視したい場合：
+To also monitor repositories where you are not explicitly requested as a reviewer:
 
 ```bash
 gh pr-todo -r owner/repo1 -r owner/repo2
 ```
 
-### 設定ファイルでリポジトリを登録
+### Config file
 
-毎回 `-r` を打たなくて済むように、設定ファイルにリポジトリを書いておけます：
+Save repositories in a config file so you don't have to pass `-r` every time:
 
 ```bash
 mkdir -p ~/.config/gh-pr-todo
@@ -38,51 +38,51 @@ repos:
 EOF
 ```
 
-以降は `gh pr-todo` だけで、アサイン分 + 設定ファイルのリポジトリを全て確認します。
+Then `gh pr-todo` alone will check both your assigned reviews and the configured repositories.
 
-### JSON 出力
+### JSON output
 
 ```bash
-# URL 一覧
+# List URLs
 gh pr-todo --json | jq -r '.[].url'
 
-# 未レビューのみ
+# Only unreviewed
 gh pr-todo --json | jq '[.[] | select(.my_review_state == "")]'
 
-# リポジトリごとの件数
+# Count by repository
 gh pr-todo --json | jq 'group_by(.repo) | map({repo: .[0].repo, count: length})'
 ```
 
-## オプション
+## Options
 
-| フラグ | 説明 |
+| Flag | Description |
 | --- | --- |
-| `-r, --repo OWNER/REPO` | 追加リポジトリ (複数指定可) |
-| `--include-mine` | 自分が作成した PR も含める |
-| `--include-draft` | Draft PR も含める |
-| `--json` | JSON 形式で出力 |
-| `-v, --version` | バージョン表示 |
+| `-r, --repo OWNER/REPO` | Additional repositories (can be specified multiple times) |
+| `--include-mine` | Include PRs you authored |
+| `--include-draft` | Include draft PRs |
+| `--json` | Output in JSON format |
+| `-v, --version` | Show version |
 
-## 動作の仕組み
+## How it works
 
-1. `gh` の認証情報をそのまま使用（トークン管理不要）
-2. 自分にレビュー依頼が来ている PR を検索（常に実行）
-3. 設定ファイル / `-r` 指定のリポジトリからオープン PR を取得
-4. 各 PR の自分のレビュー状態を確認し、`APPROVED` 以外を表示
+1. Uses `gh` authentication as-is (no extra token management needed)
+2. Searches for PRs where you are requested as a reviewer (always runs)
+3. Fetches open PRs from repositories specified in the config file or via `-r`
+4. Checks your review state on each PR and displays those not yet `APPROVED`
 
-デフォルトで自分の PR と Draft PR は除外されます。
+By default, your own PRs and draft PRs are excluded.
 
-## 開発
+## Development
 
 ```bash
 go build
 gh extension install .
 ```
 
-## リリース
+## Release
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
-# GitHub Actions がクロスプラットフォームバイナリを自動ビルド
+# GitHub Actions automatically builds cross-platform binaries
 ```
