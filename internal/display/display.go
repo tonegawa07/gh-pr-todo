@@ -45,16 +45,6 @@ func Logf(format string, args ...any) {
 	Log(fmt.Sprintf(format, args...))
 }
 
-// Progress はプログレス表示
-func Progress(current, total int) {
-	fmt.Fprintf(os.Stderr, "\r%s  レビュー状態を確認中... (%d/%d)%s  ", dim, current, total, reset)
-}
-
-// ProgressClear はプログレス表示をクリア
-func ProgressClear() {
-	fmt.Fprintf(os.Stderr, "\r%-60s\r", "")
-}
-
 func reviewStateLabel(state string) string {
 	switch state {
 	case "":

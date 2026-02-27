@@ -28,165 +28,244 @@ func (pr PullRequest) Key() string {
 
 // Client は GitHub API クライアント
 type Client struct {
-	rest *api.RESTClient
+	gql *api.GraphQLClient
 }
 
 // NewClient は go-gh の認証情報を使って Client を生成
 func NewClient() (*Client, error) {
-	rest, err := api.DefaultRESTClient()
+	gql, err := api.DefaultGraphQLClient()
 	if err != nil {
-		return nil, fmt.Errorf("GitHub API クライアントの初期化に失敗 (gh auth login は実行済みですか?): %w", err)
+		return nil, fmt.Errorf("GraphQL クライアントの初期化に失敗 (gh auth login は実行済みですか?): %w", err)
 	}
-	return &Client{rest: rest}, nil
+	return &Client{gql: gql}, nil
 }
 
 // GetAuthenticatedUser は認証ユーザーのログイン名を返す
 func (c *Client) GetAuthenticatedUser() (string, error) {
-	var user struct {
-		Login string `json:"login"`
+	var q struct {
+		Viewer struct {
+			Login string
+		}
 	}
-	if err := c.rest.Get("user", &user); err != nil {
+	if err := c.gql.Query("Viewer", &q, nil); err != nil {
 		return "", fmt.Errorf("ユーザー情報の取得に失敗: %w", err)
 	}
-	return user.Login, nil
+	return q.Viewer.Login, nil
 }
 
-// SearchReviewRequested は自分にレビュー依頼が来ているオープン PR を返す
+// ── Search: レビュー依頼された PR ──────────────────────────────────
+
+const searchQuery = `
+query ReviewRequested($query: String!, $cursor: String) {
+  search(query: $query, type: ISSUE, first: 50, after: $cursor) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        url
+        createdAt
+        updatedAt
+        isDraft
+        author { login }
+        repository {
+          nameWithOwner
+        }
+        labels(first: 10) {
+          nodes { name }
+        }
+        reviews(first: 100) {
+          nodes {
+            author { login }
+            state
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+type searchResponse struct {
+	Search struct {
+		PageInfo struct {
+			HasNextPage bool
+			EndCursor   string
+		}
+		Nodes []prNode
+	}
+}
+
+type prNode struct {
+	Number     int
+	Title      string
+	URL        string
+	CreatedAt  string
+	UpdatedAt  string
+	IsDraft    bool
+	Author     struct{ Login string }
+	Repository struct {
+		NameWithOwner string
+	}
+	Labels struct {
+		Nodes []struct{ Name string }
+	}
+	Reviews struct {
+		Nodes []struct {
+			Author struct{ Login string }
+			State  string
+		}
+	}
+}
+
+// SearchReviewRequested は自分にレビュー依頼が来ているオープン PR を
+// レビュー状態付きで返す (1クエリで PR + レビューを取得)
 func (c *Client) SearchReviewRequested(username string) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr is:open review-requested:%s", username)
+	q := fmt.Sprintf("is:pr is:open review-requested:%s", username)
 
-	var result searchResult
-	if err := c.rest.Get(fmt.Sprintf("search/issues?q=%s&per_page=100&sort=updated", urlEncode(query)), &result); err != nil {
-		return nil, fmt.Errorf("レビュー依頼 PR の検索に失敗: %w", err)
-	}
+	var allPRs []PullRequest
+	var cursor *string
 
-	prs := make([]PullRequest, 0, len(result.Items))
-	for _, item := range result.Items {
-		labels := make([]string, 0, len(item.Labels))
-		for _, l := range item.Labels {
-			labels = append(labels, l.Name)
-		}
-		prs = append(prs, PullRequest{
-			Repo:      extractRepo(item.RepositoryURL),
-			Number:    item.Number,
-			Title:     item.Title,
-			Author:    item.User.Login,
-			URL:       item.HTMLURL,
-			CreatedAt: item.CreatedAt,
-			UpdatedAt: item.UpdatedAt,
-			Labels:    labels,
-		})
-	}
-	return prs, nil
-}
-
-// GetOpenPRs は特定リポジトリのオープン PR を返す
-func (c *Client) GetOpenPRs(repo string) ([]PullRequest, error) {
-	var all []prResponse
-
-	page := 1
 	for {
-		var page_ []prResponse
-		path := fmt.Sprintf("repos/%s/pulls?state=open&per_page=100&page=%d", repo, page)
-		if err := c.rest.Get(path, &page_); err != nil {
-			return nil, fmt.Errorf("%s の PR 取得に失敗: %w", repo, err)
+		vars := map[string]interface{}{
+			"query": q,
 		}
-		if len(page_) == 0 {
+		if cursor != nil {
+			vars["cursor"] = *cursor
+		}
+
+		var resp searchResponse
+		if err := c.gql.Do(searchQuery, vars, &resp); err != nil {
+			return nil, fmt.Errorf("レビュー依頼 PR の検索に失敗: %w", err)
+		}
+
+		for _, node := range resp.Search.Nodes {
+			allPRs = append(allPRs, nodeToPR(node, username))
+		}
+
+		if !resp.Search.PageInfo.HasNextPage {
 			break
 		}
-		all = append(all, page_...)
-		if len(page_) < 100 {
+		cursor = &resp.Search.PageInfo.EndCursor
+	}
+
+	return allPRs, nil
+}
+
+// ── リポジトリのオープン PR ────────────────────────────────────────
+
+const repoPRsQuery = `
+query RepoPRs($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: 50, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        number
+        title
+        url
+        createdAt
+        updatedAt
+        isDraft
+        author { login }
+        repository {
+          nameWithOwner
+        }
+        labels(first: 10) {
+          nodes { name }
+        }
+        reviews(first: 100) {
+          nodes {
+            author { login }
+            state
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+type repoPRsResponse struct {
+	Repository struct {
+		PullRequests struct {
+			PageInfo struct {
+				HasNextPage bool
+				EndCursor   string
+			}
+			Nodes []prNode
+		}
+	}
+}
+
+// GetOpenPRs は特定リポジトリのオープン PR をレビュー状態付きで返す
+func (c *Client) GetOpenPRs(owner, name, username string) ([]PullRequest, error) {
+	var allPRs []PullRequest
+	var cursor *string
+
+	for {
+		vars := map[string]interface{}{
+			"owner": owner,
+			"name":  name,
+		}
+		if cursor != nil {
+			vars["cursor"] = *cursor
+		}
+
+		var resp repoPRsResponse
+		if err := c.gql.Do(repoPRsQuery, vars, &resp); err != nil {
+			return nil, fmt.Errorf("%s/%s の PR 取得に失敗: %w", owner, name, err)
+		}
+
+		for _, node := range resp.Repository.PullRequests.Nodes {
+			allPRs = append(allPRs, nodeToPR(node, username))
+		}
+
+		if !resp.Repository.PullRequests.PageInfo.HasNextPage {
 			break
 		}
-		page++
+		cursor = &resp.Repository.PullRequests.PageInfo.EndCursor
 	}
 
-	prs := make([]PullRequest, 0, len(all))
-	for _, pr := range all {
-		labels := make([]string, 0, len(pr.Labels))
-		for _, l := range pr.Labels {
-			labels = append(labels, l.Name)
-		}
-		prs = append(prs, PullRequest{
-			Repo:      repo,
-			Number:    pr.Number,
-			Title:     pr.Title,
-			Author:    pr.User.Login,
-			URL:       pr.HTMLURL,
-			CreatedAt: pr.CreatedAt,
-			UpdatedAt: pr.UpdatedAt,
-			Draft:     pr.Draft,
-			Labels:    labels,
-		})
-	}
-	return prs, nil
+	return allPRs, nil
 }
 
-// GetMyReviewState は PR に対する自分の最新レビュー状態を返す
-func (c *Client) GetMyReviewState(repo string, prNumber int, username string) (string, error) {
-	var reviews []reviewResponse
-	path := fmt.Sprintf("repos/%s/pulls/%d/reviews", repo, prNumber)
-	if err := c.rest.Get(path, &reviews); err != nil {
-		return "", fmt.Errorf("レビュー状態の取得に失敗 (%s#%d): %w", repo, prNumber, err)
+// ── 共通変換 ────────────────────────────────────────────────────────
+
+func nodeToPR(node prNode, username string) PullRequest {
+	labels := make([]string, 0, len(node.Labels.Nodes))
+	for _, l := range node.Labels.Nodes {
+		labels = append(labels, l.Name)
 	}
 
-	var latest string
-	for _, r := range reviews {
-		if equalFold(r.User.Login, username) {
-			latest = r.State
+	// 自分の最新レビュー状態を探す
+	var myState string
+	for _, r := range node.Reviews.Nodes {
+		if equalFold(r.Author.Login, username) {
+			myState = r.State
 		}
 	}
-	return latest, nil
-}
 
-// ── 内部型 ──────────────────────────────────────────────────────────
-
-type searchResult struct {
-	Items []searchItem `json:"items"`
-}
-
-type searchItem struct {
-	Number        int         `json:"number"`
-	Title         string      `json:"title"`
-	User          userInfo    `json:"user"`
-	HTMLURL       string      `json:"html_url"`
-	RepositoryURL string      `json:"repository_url"`
-	CreatedAt     string      `json:"created_at"`
-	UpdatedAt     string      `json:"updated_at"`
-	Labels        []labelInfo `json:"labels"`
-}
-
-type prResponse struct {
-	Number    int         `json:"number"`
-	Title     string      `json:"title"`
-	User      userInfo    `json:"user"`
-	HTMLURL   string      `json:"html_url"`
-	CreatedAt string      `json:"created_at"`
-	UpdatedAt string      `json:"updated_at"`
-	Draft     bool        `json:"draft"`
-	Labels    []labelInfo `json:"labels"`
-}
-
-type reviewResponse struct {
-	User  userInfo `json:"user"`
-	State string   `json:"state"`
-}
-
-type userInfo struct {
-	Login string `json:"login"`
-}
-
-type labelInfo struct {
-	Name string `json:"name"`
-}
-
-func extractRepo(repositoryURL string) string {
-	const prefix = "https://api.github.com/repos/"
-	if len(repositoryURL) > len(prefix) {
-		return repositoryURL[len(prefix):]
+	return PullRequest{
+		Repo:          node.Repository.NameWithOwner,
+		Number:        node.Number,
+		Title:         node.Title,
+		Author:        node.Author.Login,
+		URL:           node.URL,
+		CreatedAt:     node.CreatedAt,
+		UpdatedAt:     node.UpdatedAt,
+		Draft:         node.IsDraft,
+		Labels:        labels,
+		MyReviewState: myState,
 	}
-	return repositoryURL
 }
+
+// ── ヘルパー ────────────────────────────────────────────────────────
 
 func equalFold(a, b string) bool {
 	if len(a) != len(b) {
@@ -205,25 +284,6 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
-}
-
-func urlEncode(s string) string {
-	var result []byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-			c == '-' || c == '_' || c == '.' || c == '~':
-			result = append(result, c)
-		case c == ' ':
-			result = append(result, '+')
-		default:
-			result = append(result, '%')
-			result = append(result, "0123456789ABCDEF"[c>>4])
-			result = append(result, "0123456789ABCDEF"[c&0x0F])
-		}
-	}
-	return string(result)
 }
 
 // ToJSON は PR リストを JSON 文字列に変換

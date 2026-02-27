@@ -11,7 +11,7 @@ import (
 	"github.com/tonegawa07/gh-pr-todo/internal/github"
 )
 
-const version = "0.1.0"
+const version = "1.0.0"
 
 type repoList []string
 
@@ -84,8 +84,6 @@ func run(extraRepos repoList, includeMine, includeDraft, jsonOutput bool) error 
 	if err != nil {
 		return fmt.Errorf("設定ファイルの読み込みに失敗: %w", err)
 	}
-
-	// config + CLI引数のリポジトリをマージ
 	repos := append(cfg.Repos, extraRepos...)
 
 	// ── クライアント初期化 ──
@@ -102,28 +100,14 @@ func run(extraRepos repoList, includeMine, includeDraft, jsonOutput bool) error 
 	}
 	display.Logf("👤 ユーザー: %s", username)
 
-	// ── PR 収集 (常にアサイン分 + 指定リポジトリ) ──
+	// ── PR 収集 (GraphQL で PR + レビュー状態を一括取得) ──
 	collected, err := collectPRs(client, username, repos)
 	if err != nil {
 		return err
 	}
 
-	if len(collected) == 0 {
-		if jsonOutput {
-			fmt.Println("[]")
-		} else {
-			fmt.Printf("\n✅ 対象のオープンPRが見つかりませんでした\n")
-		}
-		return nil
-	}
-
-	// ── フィルタ ──
-	display.Logf("🔎 %d 件のPRのレビュー状態を確認中...", len(collected))
-	pending, err := filterPending(client, collected, username, includeMine, includeDraft)
-	if err != nil {
-		return err
-	}
-	display.ProgressClear()
+	// ── フィルタ (ローカル処理のみ、API 呼び出し不要) ──
+	pending := filterPending(collected, username, includeMine, includeDraft)
 
 	// ── 出力 ──
 	if jsonOutput {
@@ -153,7 +137,7 @@ func collectPRs(client *github.Client, username string, repos []string) ([]githu
 		}
 	}
 
-	// 1) 常にアサイン分を取得
+	// 1) 常にアサイン分を取得 (1 GraphQL クエリ)
 	display.Log("🔍 レビュー依頼されたPRを検索中...")
 	assigned, err := client.SearchReviewRequested(username)
 	if err != nil {
@@ -162,10 +146,14 @@ func collectPRs(client *github.Client, username string, repos []string) ([]githu
 	addUnique(assigned)
 	display.Logf("   → %d 件", len(assigned))
 
-	// 2) 指定リポジトリのオープン PR
+	// 2) 指定リポジトリのオープン PR (リポジトリごとに 1 GraphQL クエリ)
 	for _, repo := range repos {
 		display.Logf("📦 %s のオープンPRを取得中...", repo)
-		prs, err := client.GetOpenPRs(repo)
+		owner, name, err := splitRepo(repo)
+		if err != nil {
+			return nil, err
+		}
+		prs, err := client.GetOpenPRs(owner, name, username)
 		if err != nil {
 			return nil, err
 		}
@@ -178,30 +166,28 @@ func collectPRs(client *github.Client, username string, repos []string) ([]githu
 	return result, nil
 }
 
-func filterPending(client *github.Client, prs []github.PullRequest, username string, includeMine, includeDraft bool) ([]github.PullRequest, error) {
+// filterPending は APPROVED 済み / 自分の PR / Draft を除外する (ローカル処理のみ)
+func filterPending(prs []github.PullRequest, username string, includeMine, includeDraft bool) []github.PullRequest {
 	var pending []github.PullRequest
-	total := len(prs)
-
-	for i, pr := range prs {
-		display.Progress(i+1, total)
-
+	for _, pr := range prs {
 		if !includeMine && strings.EqualFold(pr.Author, username) {
 			continue
 		}
 		if !includeDraft && pr.Draft {
 			continue
 		}
-
-		state, err := client.GetMyReviewState(pr.Repo, pr.Number, username)
-		if err != nil {
-			return nil, err
+		if pr.MyReviewState == "APPROVED" {
+			continue
 		}
-		pr.MyReviewState = state
-
-		if state != "APPROVED" {
-			pending = append(pending, pr)
-		}
+		pending = append(pending, pr)
 	}
+	return pending
+}
 
-	return pending, nil
+func splitRepo(repo string) (owner, name string, err error) {
+	parts := strings.SplitN(repo, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("リポジトリの形式が不正です (OWNER/REPO): %s", repo)
+	}
+	return parts[0], parts[1], nil
 }
