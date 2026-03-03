@@ -53,8 +53,8 @@ func reviewStateLabel(state string) string {
 	}
 }
 
-// reviewStatePriority はステータスのソート優先度を返す (小さいほど上に表示)
-func reviewStatePriority(state string) int {
+// ReviewStatePriority はステータスのソート優先度を返す (小さいほど上に表示)
+func ReviewStatePriority(state string) int {
 	switch state {
 	case "":
 		return 0
@@ -155,17 +155,11 @@ func hyperlink(url, text string) string {
 	return fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", url, text)
 }
 
-// PrintTable はコンパクトな1行テーブルで PR 一覧を表示
-func PrintTable(prs []github.PullRequest) {
-	if len(prs) == 0 {
-		fmt.Printf("%s✅ レビュー依頼されているPRはありません！%s\n", green, reset)
-		return
-	}
-
-	// ステータス優先度でソート (同じ優先度ならリポジトリ名 → PR番号)
+// SortPRs はステータス優先度でソート (同じ優先度ならリポジトリ名 → PR番号)
+func SortPRs(prs []github.PullRequest) {
 	sort.Slice(prs, func(i, j int) bool {
-		pi := reviewStatePriority(prs[i].MyReviewState)
-		pj := reviewStatePriority(prs[j].MyReviewState)
+		pi := ReviewStatePriority(prs[i].MyReviewState)
+		pj := ReviewStatePriority(prs[j].MyReviewState)
 		if pi != pj {
 			return pi < pj
 		}
@@ -174,6 +168,49 @@ func PrintTable(prs []github.PullRequest) {
 		}
 		return prs[i].Number < prs[j].Number
 	})
+}
+
+// ReviewStateEmoji はステータスの絵文字を返す (色コードなし、Web 用)
+func ReviewStateEmoji(state string) string {
+	switch state {
+	case "":
+		return "⏳"
+	case "CHANGES_REQUESTED":
+		return "🔴"
+	case "COMMENTED":
+		return "💬"
+	case "DISMISSED":
+		return "🚫"
+	case "APPROVED":
+		return "✅"
+	default:
+		return state
+	}
+}
+
+// CIEmoji は CI ステータスの絵文字を返す (色コードなし、Web 用)
+func CIEmoji(state string) string {
+	switch state {
+	case "SUCCESS":
+		return "✅"
+	case "FAILURE", "ERROR":
+		return "❌"
+	case "PENDING", "EXPECTED":
+		return "🟡"
+	default:
+		return "➖"
+	}
+}
+
+// PrintTable はコンパクトな1行テーブルで PR 一覧を表示
+func PrintTable(prs []github.PullRequest) {
+	if len(prs) == 0 {
+		fmt.Printf("%s✅ レビュー依頼されているPRはありません！%s\n", green, reset)
+		return
+	}
+
+	// ステータス優先度でソート
+	SortPRs(prs)
 
 	// 列幅の計算
 	maxRepo := len("REPO")

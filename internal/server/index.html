@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gh-pr-todo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 2rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #e6edf3;
+  }
+  .empty {
+    color: #3fb950;
+    font-size: 1rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #30363d;
+    color: #8b949e;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  th.center { text-align: center; }
+  th.right { text-align: right; }
+  td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+    white-space: nowrap;
+  }
+  td.center { text-align: center; }
+  td.right { text-align: right; }
+  tr:hover { background: #161b22; }
+  a {
+    color: #58a6ff;
+    text-decoration: none;
+  }
+  a:hover { text-decoration: underline; }
+  .title-cell {
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .meta {
+    color: #8b949e;
+    font-size: 0.8rem;
+  }
+  .reload-btn {
+    background: #21262d;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .reload-btn:hover { background: #30363d; }
+  .author-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+<h1>gh-pr-todo</h1>
+<div class="header-row">
+  <p class="meta">{{.Count}} open review requests</p>
+  <button class="reload-btn" onclick="location.reload()">&#x21bb; Reload</button>
+</div>
+{{if eq .Count 0}}
+<p class="empty">&#x2705; No pull requests awaiting your review!</p>
+{{else}}
+<table>
+  <thead>
+    <tr>
+      <th class="center">Status</th>
+      <th>Repo</th>
+      <th class="right">#</th>
+      <th>Title</th>
+      <th>Author</th>
+      <th class="center">CI</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .PRs}}
+    <tr>
+      <td class="center">{{.StatusEmoji}}</td>
+      <td><a href="https://github.com/{{.Repo}}">{{.Repo}}</a></td>
+      <td class="right"><a href="{{.URL}}">#{{.Number}}</a></td>
+      <td class="title-cell"><a href="{{.URL}}">{{.Title}}</a></td>
+      <td class="author-cell"><img class="avatar" src="https://github.com/{{.Author}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.Author}}">{{.Author}}</a></td>
+      <td class="center">{{.CIEmoji}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+</body>
+</html>
