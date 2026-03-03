@@ -71,6 +71,20 @@ func reviewStatePriority(state string) int {
 	}
 }
 
+// ciLabel は CI ステータスの絵文字を返す
+func ciLabel(state string) string {
+	switch state {
+	case "SUCCESS":
+		return green + "✅" + reset
+	case "FAILURE", "ERROR":
+		return red + "❌" + reset
+	case "PENDING", "EXPECTED":
+		return yellow + "🟡" + reset
+	default:
+		return dim + "➖" + reset
+	}
+}
+
 // runeWidth は文字の表示幅を返す (全角=2, 半角=1)
 func runeWidth(r rune) int {
 	if r >= 0x1100 &&
@@ -172,7 +186,8 @@ func PrintTable(prs []github.PullRequest) {
 		title  string
 		url    string
 		author string
-		label  string // colored emoji
+		label  string // review status emoji
+		ci     string // CI status emoji
 	}
 
 	rows := make([]row, len(prs))
@@ -185,6 +200,7 @@ func PrintTable(prs []github.PullRequest) {
 			url:    pr.URL,
 			author: pr.Author,
 			label:  reviewStateLabel(pr.MyReviewState),
+			ci:     ciLabel(pr.CIState),
 		}
 		if w := stringWidth(pr.Repo); w > maxRepo {
 			maxRepo = w
@@ -207,13 +223,12 @@ func PrintTable(prs []github.PullRequest) {
 	}
 
 	// ヘッダー
-
-	// ヘッダー
-	header := fmt.Sprintf("     %s  %s  %s  %s",
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s",
 		padRight("REPO", maxRepo),
 		padLeft("#", maxNum),
 		padRight("TITLE", maxTitle),
-		"AUTHOR",
+		padRight("AUTHOR", maxAuthor),
+		"CI",
 	)
 	fmt.Printf("%s%s%s\n", bold, header, reset)
 	fmt.Println(strings.Repeat("─", stringWidth(header)))
@@ -229,14 +244,15 @@ func PrintTable(prs []github.PullRequest) {
 
 		linkedRepo := hyperlink("https://github.com/"+r.repo, padRight(r.repo, maxRepo))
 		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
-		linkedAuthor := hyperlink("https://github.com/"+r.author, r.author)
+		linkedAuthor := hyperlink("https://github.com/"+r.author, padRight(r.author, maxAuthor))
 
-		fmt.Printf(" %s  %s  %s  %s  %s\n",
+		fmt.Printf(" %s  %s  %s  %s  %s  %s\n",
 			r.label,
 			linkedRepo,
 			linkedNum,
 			linkedTitle,
 			linkedAuthor,
+			r.ci,
 		)
 	}
 }

@@ -19,6 +19,7 @@ type PullRequest struct {
 	Draft         bool     `json:"draft"`
 	Labels        []string `json:"labels"`
 	MyReviewState string   `json:"my_review_state"`
+	CIState       string   `json:"ci_state"`
 }
 
 // Key は重複排除用の一意キー
@@ -77,6 +78,15 @@ query ReviewRequested($query: String!, $cursor: String) {
         labels(first: 10) {
           nodes { name }
         }
+        commits(last: 1) {
+          nodes {
+            commit {
+              statusCheckRollup {
+                state
+              }
+            }
+          }
+        }
         reviews(first: 100) {
           nodes {
             author { login }
@@ -112,6 +122,15 @@ type prNode struct {
 	}
 	Labels struct {
 		Nodes []struct{ Name string }
+	}
+	Commits struct {
+		Nodes []struct {
+			Commit struct {
+				StatusCheckRollup *struct {
+					State string
+				}
+			}
+		}
 	}
 	Reviews struct {
 		Nodes []struct {
@@ -171,6 +190,13 @@ func nodeToPR(node prNode, username string) PullRequest {
 		}
 	}
 
+	var ciState string
+	if len(node.Commits.Nodes) > 0 {
+		if rollup := node.Commits.Nodes[0].Commit.StatusCheckRollup; rollup != nil {
+			ciState = rollup.State
+		}
+	}
+
 	return PullRequest{
 		Repo:          node.Repository.NameWithOwner,
 		Number:        node.Number,
@@ -182,6 +208,7 @@ func nodeToPR(node prNode, username string) PullRequest {
 		Draft:         node.IsDraft,
 		Labels:        labels,
 		MyReviewState: myState,
+		CIState:       ciState,
 	}
 }
 
