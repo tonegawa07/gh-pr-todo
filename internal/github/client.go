@@ -18,6 +18,7 @@ type PullRequest struct {
 	UpdatedAt     string   `json:"updated_at"`
 	Draft         bool     `json:"draft"`
 	Labels        []string `json:"labels"`
+	Branch        string   `json:"branch"`
 	MyReviewState string   `json:"my_review_state"`
 	CIState       string   `json:"ci_state"`
 	Approvals     int      `json:"approvals"`
@@ -73,6 +74,7 @@ query ReviewRequested($query: String!, $cursor: String) {
         createdAt
         updatedAt
         isDraft
+        headRefName
         author { login }
         repository {
           nameWithOwner
@@ -117,8 +119,9 @@ type prNode struct {
 	URL        string
 	CreatedAt  string
 	UpdatedAt  string
-	IsDraft    bool
-	Author     struct{ Login string }
+	IsDraft     bool
+	HeadRefName string
+	Author      struct{ Login string }
 	Repository struct {
 		NameWithOwner string
 	}
@@ -243,6 +246,7 @@ func nodeToPR(node prNode, username string) PullRequest {
 		CreatedAt:     node.CreatedAt,
 		UpdatedAt:     node.UpdatedAt,
 		Draft:         node.IsDraft,
+		Branch:        node.HeadRefName,
 		Labels:        labels,
 		MyReviewState: myState,
 		CIState:       ciState,
@@ -313,6 +317,7 @@ func nodeToMyPR(node prNode) PullRequest {
 		CreatedAt:     node.CreatedAt,
 		UpdatedAt:     node.UpdatedAt,
 		Draft:         node.IsDraft,
+		Branch:        node.HeadRefName,
 		Labels:        labels,
 		MyReviewState: aggregatedState,
 		CIState:       ciState,

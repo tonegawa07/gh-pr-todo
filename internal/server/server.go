@@ -30,6 +30,7 @@ type prRow struct {
 	Title       string `json:"title"`
 	Author      string `json:"author"`
 	URL         string `json:"url"`
+	Branch      string `json:"branch,omitempty"`
 	StatusEmoji string `json:"status_emoji"`
 	CIEmoji     string `json:"ci_emoji"`
 	Approvals   string `json:"approvals,omitempty"`
@@ -88,6 +89,7 @@ func fetchMyPRs(client *github.Client, username string) ([]prRow, error) {
 			Title:       pr.Title,
 			Author:      pr.Author,
 			URL:         pr.URL,
+			Branch:      pr.Branch,
 			StatusEmoji: display.MyPRStateEmoji(pr.MyReviewState),
 			CIEmoji:     display.CIEmoji(pr.CIState),
 			Approvals:   fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount),

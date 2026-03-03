@@ -94,6 +94,14 @@
     border-radius: 50%;
     vertical-align: middle;
   }
+  .branch-cell {
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    color: #8b949e;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .section {
     margin-bottom: 2rem;
   }
@@ -133,6 +141,7 @@
         <th>Repo</th>
         <th class="right">#</th>
         <th>Title</th>
+        <th>Branch</th>
         <th class="center">Approvals</th>
         <th class="center">CI</th>
       </tr>
@@ -144,6 +153,7 @@
         <td><a href="https://github.com/{{.Repo}}">{{.Repo}}</a></td>
         <td class="right"><a href="{{.URL}}">#{{.Number}}</a></td>
         <td class="title-cell"><a href="{{.URL}}">{{.Title}}</a></td>
+        <td class="branch-cell">{{.Branch}}</td>
         <td class="center">{{.Approvals}}</td>
         <td class="center">{{.CIEmoji}}</td>
       </tr>

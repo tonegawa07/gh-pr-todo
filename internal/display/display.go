@@ -272,12 +272,14 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	maxRepo := len("REPO")
 	maxNum := len("#")
 	maxTitle := len("TITLE")
+	maxBranch := len("BRANCH")
 	maxApprovals := len("APPROVALS")
 	type row struct {
 		repo      string
 		num       string
 		title     string
 		url       string
+		branch    string
 		label     string
 		approvals string
 		ci        string
@@ -292,6 +294,7 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 			num:       numStr,
 			title:     pr.Title,
 			url:       pr.URL,
+			branch:    pr.Branch,
 			label:     myPRStateLabel(pr.MyReviewState),
 			approvals: appStr,
 			ci:        ciLabel(pr.CIState),
@@ -305,6 +308,9 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 		if w := stringWidth(pr.Title); w > maxTitle {
 			maxTitle = w
 		}
+		if w := stringWidth(pr.Branch); w > maxBranch {
+			maxBranch = w
+		}
 		if w := stringWidth(appStr); w > maxApprovals {
 			maxApprovals = w
 		}
@@ -314,12 +320,17 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	if maxTitle > titleLimit {
 		maxTitle = titleLimit
 	}
+	const branchLimit = 30
+	if maxBranch > branchLimit {
+		maxBranch = branchLimit
+	}
 
 	// ヘッダー
-	header := fmt.Sprintf("     %s  %s  %s  %s  %s",
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s",
 		padRight("REPO", maxRepo),
 		padLeft("#", maxNum),
 		padRight("TITLE", maxTitle),
+		padRight("BRANCH", maxBranch),
 		padLeft("APPROVALS", maxApprovals),
 		"CI",
 	)
@@ -335,14 +346,20 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 		displayTitle := padRight(title, maxTitle)
 		linkedTitle := hyperlink(r.url, displayTitle)
 
+		branch := r.branch
+		if stringWidth(branch) > maxBranch {
+			branch = truncate(branch, maxBranch)
+		}
+
 		linkedRepo := hyperlink("https://github.com/"+r.repo, padRight(r.repo, maxRepo))
 		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
 
-		fmt.Printf(" %s  %s  %s  %s  %s  %s\n",
+		fmt.Printf(" %s  %s  %s  %s  %s%s%s  %s  %s\n",
 			r.label,
 			linkedRepo,
 			linkedNum,
 			linkedTitle,
+			dim, padRight(branch, maxBranch), reset,
 			padLeft(r.approvals, maxApprovals),
 			r.ci,
 		)
