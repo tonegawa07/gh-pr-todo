@@ -25,15 +25,16 @@ type templateData struct {
 }
 
 type prRow struct {
-	Repo        string `json:"repo"`
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	Author      string `json:"author"`
-	URL         string `json:"url"`
-	Branch      string `json:"branch,omitempty"`
-	StatusEmoji string `json:"status_emoji"`
-	CIEmoji     string `json:"ci_emoji"`
-	Approvals   string `json:"approvals,omitempty"`
+	Repo        string   `json:"repo"`
+	Number      int      `json:"number"`
+	Title       string   `json:"title"`
+	Author      string   `json:"author"`
+	URL         string   `json:"url"`
+	Branch      string   `json:"branch,omitempty"`
+	Assignees   []string `json:"assignees"`
+	StatusEmoji string   `json:"status_emoji"`
+	CIEmoji     string   `json:"ci_emoji"`
+	Approvals   string   `json:"approvals,omitempty"`
 }
 
 func filterDraft(prs []github.PullRequest, includeDraft bool) []github.PullRequest {
@@ -66,6 +67,7 @@ func fetchReviewPRs(client *github.Client, username string, includeDraft bool) (
 			Title:       pr.Title,
 			Author:      pr.Author,
 			URL:         pr.URL,
+			Assignees:   pr.Assignees,
 			StatusEmoji: display.ReviewStateEmoji(pr.MyReviewState),
 			CIEmoji:     display.CIEmoji(pr.CIState),
 		}
@@ -90,6 +92,7 @@ func fetchMyPRs(client *github.Client, username string) ([]prRow, error) {
 			Author:      pr.Author,
 			URL:         pr.URL,
 			Branch:      pr.Branch,
+			Assignees:   pr.Assignees,
 			StatusEmoji: display.MyPRStateEmoji(pr.MyReviewState),
 			CIEmoji:     display.CIEmoji(pr.CIState),
 			Approvals:   fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount),

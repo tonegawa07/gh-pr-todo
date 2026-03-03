@@ -19,6 +19,7 @@ type PullRequest struct {
 	Draft         bool     `json:"draft"`
 	Labels        []string `json:"labels"`
 	Branch        string   `json:"branch"`
+	Assignees     []string `json:"assignees"`
 	MyReviewState string   `json:"my_review_state"`
 	CIState       string   `json:"ci_state"`
 	Approvals     int      `json:"approvals"`
@@ -76,6 +77,9 @@ query ReviewRequested($query: String!, $cursor: String) {
         isDraft
         headRefName
         author { login }
+        assignees(first: 10) {
+          nodes { login }
+        }
         repository {
           nameWithOwner
         }
@@ -122,6 +126,9 @@ type prNode struct {
 	IsDraft     bool
 	HeadRefName string
 	Author      struct{ Login string }
+	Assignees struct {
+		Nodes []struct{ Login string }
+	}
 	Repository struct {
 		NameWithOwner string
 	}
@@ -216,6 +223,14 @@ func (c *Client) SearchMyPRs(username string) ([]PullRequest, error) {
 
 // ── 共通変換 ────────────────────────────────────────────────────────
 
+func nodeAssignees(node prNode) []string {
+	assignees := make([]string, 0, len(node.Assignees.Nodes))
+	for _, a := range node.Assignees.Nodes {
+		assignees = append(assignees, a.Login)
+	}
+	return assignees
+}
+
 func nodeToPR(node prNode, username string) PullRequest {
 	labels := make([]string, 0, len(node.Labels.Nodes))
 	for _, l := range node.Labels.Nodes {
@@ -248,6 +263,7 @@ func nodeToPR(node prNode, username string) PullRequest {
 		Draft:         node.IsDraft,
 		Branch:        node.HeadRefName,
 		Labels:        labels,
+		Assignees:     nodeAssignees(node),
 		MyReviewState: myState,
 		CIState:       ciState,
 	}
@@ -319,6 +335,7 @@ func nodeToMyPR(node prNode) PullRequest {
 		Draft:         node.IsDraft,
 		Branch:        node.HeadRefName,
 		Labels:        labels,
+		Assignees:     nodeAssignees(node),
 		MyReviewState: aggregatedState,
 		CIState:       ciState,
 		Approvals:     approvals,

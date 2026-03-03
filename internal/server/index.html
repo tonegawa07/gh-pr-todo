@@ -102,6 +102,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .assignee {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-right: 0.4rem;
+  }
   .section {
     margin-bottom: 2rem;
   }
@@ -142,6 +148,7 @@
         <th class="right">#</th>
         <th>Title</th>
         <th>Branch</th>
+        <th>Assignees</th>
         <th class="center">Approvals</th>
         <th class="center">CI</th>
       </tr>
@@ -154,6 +161,7 @@
         <td class="right"><a href="{{.URL}}">#{{.Number}}</a></td>
         <td class="title-cell"><a href="{{.URL}}">{{.Title}}</a></td>
         <td class="branch-cell">{{.Branch}}</td>
+        <td>{{range .Assignees}}<span class="assignee"><img class="avatar" src="https://github.com/{{.}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.}}">{{.}}</a></span>{{end}}</td>
         <td class="center">{{.Approvals}}</td>
         <td class="center">{{.CIEmoji}}</td>
       </tr>
@@ -180,6 +188,7 @@
         <th class="right">#</th>
         <th>Title</th>
         <th>Author</th>
+        <th>Assignees</th>
         <th class="center">CI</th>
       </tr>
     </thead>
@@ -191,6 +200,7 @@
         <td class="right"><a href="{{.URL}}">#{{.Number}}</a></td>
         <td class="title-cell"><a href="{{.URL}}">{{.Title}}</a></td>
         <td class="author-cell"><img class="avatar" src="https://github.com/{{.Author}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.Author}}">{{.Author}}</a></td>
+        <td>{{range .Assignees}}<span class="assignee"><img class="avatar" src="https://github.com/{{.}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.}}">{{.}}</a></span>{{end}}</td>
         <td class="center">{{.CIEmoji}}</td>
       </tr>
       {{end}}

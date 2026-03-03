@@ -273,6 +273,7 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	maxNum := len("#")
 	maxTitle := len("TITLE")
 	maxBranch := len("BRANCH")
+	maxAssignees := len("ASSIGNEES")
 	maxApprovals := len("APPROVALS")
 	type row struct {
 		repo      string
@@ -280,6 +281,7 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 		title     string
 		url       string
 		branch    string
+		assignees string
 		label     string
 		approvals string
 		ci        string
@@ -289,12 +291,14 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	for i, pr := range prs {
 		numStr := fmt.Sprintf("#%d", pr.Number)
 		appStr := fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount)
+		assStr := strings.Join(pr.Assignees, ", ")
 		rows[i] = row{
 			repo:      pr.Repo,
 			num:       numStr,
 			title:     pr.Title,
 			url:       pr.URL,
 			branch:    pr.Branch,
+			assignees: assStr,
 			label:     myPRStateLabel(pr.MyReviewState),
 			approvals: appStr,
 			ci:        ciLabel(pr.CIState),
@@ -311,6 +315,9 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 		if w := stringWidth(pr.Branch); w > maxBranch {
 			maxBranch = w
 		}
+		if w := stringWidth(assStr); w > maxAssignees {
+			maxAssignees = w
+		}
 		if w := stringWidth(appStr); w > maxApprovals {
 			maxApprovals = w
 		}
@@ -326,11 +333,12 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	}
 
 	// ヘッダー
-	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s",
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s  %s",
 		padRight("REPO", maxRepo),
 		padLeft("#", maxNum),
 		padRight("TITLE", maxTitle),
 		padRight("BRANCH", maxBranch),
+		padRight("ASSIGNEES", maxAssignees),
 		padLeft("APPROVALS", maxApprovals),
 		"CI",
 	)
@@ -354,12 +362,13 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 		linkedRepo := hyperlink("https://github.com/"+r.repo, padRight(r.repo, maxRepo))
 		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
 
-		fmt.Printf(" %s  %s  %s  %s  %s%s%s  %s  %s\n",
+		fmt.Printf(" %s  %s  %s  %s  %s%s%s  %s  %s  %s\n",
 			r.label,
 			linkedRepo,
 			linkedNum,
 			linkedTitle,
 			dim, padRight(branch, maxBranch), reset,
+			padRight(r.assignees, maxAssignees),
 			padLeft(r.approvals, maxApprovals),
 			r.ci,
 		)
@@ -381,27 +390,31 @@ func PrintTable(prs []github.PullRequest) {
 	maxNum := len("#")
 	maxTitle := len("TITLE")
 	maxAuthor := len("AUTHOR")
+	maxAssignees := len("ASSIGNEES")
 	type row struct {
-		repo   string
-		num    string
-		title  string
-		url    string
-		author string
-		label  string // review status emoji
-		ci     string // CI status emoji
+		repo      string
+		num       string
+		title     string
+		url       string
+		author    string
+		assignees string
+		label     string // review status emoji
+		ci        string // CI status emoji
 	}
 
 	rows := make([]row, len(prs))
 	for i, pr := range prs {
 		numStr := fmt.Sprintf("#%d", pr.Number)
+		assStr := strings.Join(pr.Assignees, ", ")
 		rows[i] = row{
-			repo:   pr.Repo,
-			num:    numStr,
-			title:  pr.Title,
-			url:    pr.URL,
-			author: pr.Author,
-			label:  reviewStateLabel(pr.MyReviewState),
-			ci:     ciLabel(pr.CIState),
+			repo:      pr.Repo,
+			num:       numStr,
+			title:     pr.Title,
+			url:       pr.URL,
+			author:    pr.Author,
+			assignees: assStr,
+			label:     reviewStateLabel(pr.MyReviewState),
+			ci:        ciLabel(pr.CIState),
 		}
 		if w := stringWidth(pr.Repo); w > maxRepo {
 			maxRepo = w
@@ -415,6 +428,9 @@ func PrintTable(prs []github.PullRequest) {
 		if w := stringWidth(pr.Author); w > maxAuthor {
 			maxAuthor = w
 		}
+		if w := stringWidth(assStr); w > maxAssignees {
+			maxAssignees = w
+		}
 	}
 
 	// タイトルの最大幅を制限
@@ -424,11 +440,12 @@ func PrintTable(prs []github.PullRequest) {
 	}
 
 	// ヘッダー
-	header := fmt.Sprintf("     %s  %s  %s  %s  %s",
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s",
 		padRight("REPO", maxRepo),
 		padLeft("#", maxNum),
 		padRight("TITLE", maxTitle),
 		padRight("AUTHOR", maxAuthor),
+		padRight("ASSIGNEES", maxAssignees),
 		"CI",
 	)
 	fmt.Printf("%s%s%s\n", bold, header, reset)
@@ -447,12 +464,13 @@ func PrintTable(prs []github.PullRequest) {
 		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
 		linkedAuthor := hyperlink("https://github.com/"+r.author, padRight(r.author, maxAuthor))
 
-		fmt.Printf(" %s  %s  %s  %s  %s  %s\n",
+		fmt.Printf(" %s  %s  %s  %s  %s  %s  %s\n",
 			r.label,
 			linkedRepo,
 			linkedNum,
 			linkedTitle,
 			linkedAuthor,
+			padRight(r.assignees, maxAssignees),
 			r.ci,
 		)
 	}
