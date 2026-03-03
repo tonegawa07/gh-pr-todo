@@ -1,11 +1,11 @@
 # gh pr-todo
 
-A [gh](https://cli.github.com/) extension that lists unmerged PRs you haven't approved yet.
+A [gh](https://cli.github.com/) extension that lists PRs where you are requested as a reviewer, along with your review status.
 
 ## Installation
 
 ```bash
-gh extension install <your-username>/gh-pr-todo
+gh extension install tonegawa07/gh-pr-todo
 ```
 
 ## Usage
@@ -14,31 +14,7 @@ gh extension install <your-username>/gh-pr-todo
 gh pr-todo
 ```
 
-This lists all unapproved PRs where you are requested as a reviewer.
-
-### Specify additional repositories
-
-To also monitor repositories where you are not explicitly requested as a reviewer:
-
-```bash
-gh pr-todo -r owner/repo1 -r owner/repo2
-```
-
-### Config file
-
-Save repositories in a config file so you don't have to pass `-r` every time:
-
-```bash
-mkdir -p ~/.config/gh-pr-todo
-cat > ~/.config/gh-pr-todo/config.yml << EOF
-repos:
-  - owner/repo1
-  - owner/repo2
-  - owner/repo3
-EOF
-```
-
-Then `gh pr-todo` alone will check both your assigned reviews and the configured repositories.
+Shows all PRs where you are requested as a reviewer, with your review status (unreviewed, commented, changes requested, approved, etc.). PRs are sorted by status priority so that unreviewed PRs appear first.
 
 ### JSON output
 
@@ -57,8 +33,6 @@ gh pr-todo --json | jq 'group_by(.repo) | map({repo: .[0].repo, count: length})'
 
 | Flag | Description |
 | --- | --- |
-| `-r, --repo OWNER/REPO` | Additional repositories (can be specified multiple times) |
-| `--include-mine` | Include PRs you authored |
 | `--include-draft` | Include draft PRs |
 | `--json` | Output in JSON format |
 | `-v, --version` | Show version |
@@ -66,11 +40,10 @@ gh pr-todo --json | jq 'group_by(.repo) | map({repo: .[0].repo, count: length})'
 ## How it works
 
 1. Uses `gh` authentication as-is (no extra token management needed)
-2. Searches for PRs where you are requested as a reviewer (always runs)
-3. Fetches open PRs from repositories specified in the config file or via `-r`
-4. Checks your review state on each PR and displays those not yet `APPROVED`
+2. Searches for PRs where you are requested as a reviewer
+3. Displays all matching PRs with your review status, sorted by priority (unreviewed first)
 
-By default, your own PRs and draft PRs are excluded.
+By default, draft PRs are excluded.
 
 ## Development
 

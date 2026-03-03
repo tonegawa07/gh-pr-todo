@@ -124,7 +124,7 @@ type prNode struct {
 // SearchReviewRequested は自分にレビュー依頼が来ているオープン PR を
 // レビュー状態付きで返す (1クエリで PR + レビューを取得)
 func (c *Client) SearchReviewRequested(username string) ([]PullRequest, error) {
-	q := fmt.Sprintf("is:pr is:open review-requested:%s", username)
+	q := fmt.Sprintf("is:pr is:open involves:%s -author:%s", username, username)
 
 	var allPRs []PullRequest
 	var cursor *string
@@ -150,86 +150,6 @@ func (c *Client) SearchReviewRequested(username string) ([]PullRequest, error) {
 			break
 		}
 		cursor = &resp.Search.PageInfo.EndCursor
-	}
-
-	return allPRs, nil
-}
-
-// ── リポジトリのオープン PR ────────────────────────────────────────
-
-const repoPRsQuery = `
-query RepoPRs($owner: String!, $name: String!, $cursor: String) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 50, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      nodes {
-        number
-        title
-        url
-        createdAt
-        updatedAt
-        isDraft
-        author { login }
-        repository {
-          nameWithOwner
-        }
-        labels(first: 10) {
-          nodes { name }
-        }
-        reviews(first: 100) {
-          nodes {
-            author { login }
-            state
-          }
-        }
-      }
-    }
-  }
-}
-`
-
-type repoPRsResponse struct {
-	Repository struct {
-		PullRequests struct {
-			PageInfo struct {
-				HasNextPage bool
-				EndCursor   string
-			}
-			Nodes []prNode
-		}
-	}
-}
-
-// GetOpenPRs は特定リポジトリのオープン PR をレビュー状態付きで返す
-func (c *Client) GetOpenPRs(owner, name, username string) ([]PullRequest, error) {
-	var allPRs []PullRequest
-	var cursor *string
-
-	for {
-		vars := map[string]interface{}{
-			"owner": owner,
-			"name":  name,
-		}
-		if cursor != nil {
-			vars["cursor"] = *cursor
-		}
-
-		var resp repoPRsResponse
-		if err := c.gql.Do(repoPRsQuery, vars, &resp); err != nil {
-			return nil, fmt.Errorf("%s/%s の PR 取得に失敗: %w", owner, name, err)
-		}
-
-		for _, node := range resp.Repository.PullRequests.Nodes {
-			allPRs = append(allPRs, nodeToPR(node, username))
-		}
-
-		if !resp.Repository.PullRequests.PageInfo.HasNextPage {
-			break
-		}
-		cursor = &resp.Repository.PullRequests.PageInfo.EndCursor
 	}
 
 	return allPRs, nil
