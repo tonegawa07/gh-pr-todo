@@ -65,7 +65,7 @@ func fetchPRs(client *github.Client, username string, includeDraft bool) ([]prRo
 }
 
 // Start starts the HTTP server.
-func Start(client *github.Client, username string, includeDraft bool, port int) error {
+func Start(client *github.Client, username string, includeDraft bool, port int, showMine, showReviews bool) error {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)

@@ -202,10 +202,157 @@ func CIEmoji(state string) string {
 	}
 }
 
+// myPRStateLabel は自分の PR の集約ステータスの色付きラベルを返す
+func myPRStateLabel(state string) string {
+	switch state {
+	case "":
+		return yellow + "⏳" + reset
+	case "CHANGES_REQUESTED":
+		return red + "🔴" + reset
+	case "APPROVED":
+		return green + "✅" + reset
+	default:
+		return dim + state + reset
+	}
+}
+
+// MyPRStateEmoji は自分の PR の集約ステータスの絵文字を返す (色コードなし、Web 用)
+func MyPRStateEmoji(state string) string {
+	switch state {
+	case "":
+		return "⏳"
+	case "CHANGES_REQUESTED":
+		return "🔴"
+	case "APPROVED":
+		return "✅"
+	default:
+		return state
+	}
+}
+
+// MyPRStatePriority は自分の PR のソート優先度を返す (小さいほど上に表示)
+func MyPRStatePriority(state string) int {
+	switch state {
+	case "CHANGES_REQUESTED":
+		return 0
+	case "":
+		return 1
+	case "APPROVED":
+		return 2
+	default:
+		return 3
+	}
+}
+
+// SortMyPRs は自分の PR をステータス優先度でソート
+func SortMyPRs(prs []github.PullRequest) {
+	sort.Slice(prs, func(i, j int) bool {
+		pi := MyPRStatePriority(prs[i].MyReviewState)
+		pj := MyPRStatePriority(prs[j].MyReviewState)
+		if pi != pj {
+			return pi < pj
+		}
+		if prs[i].Repo != prs[j].Repo {
+			return prs[i].Repo < prs[j].Repo
+		}
+		return prs[i].Number < prs[j].Number
+	})
+}
+
+// PrintMyPRsTable は自分の PR をコンパクトな1行テーブルで表示
+func PrintMyPRsTable(prs []github.PullRequest) {
+	if len(prs) == 0 {
+		fmt.Printf("%sNo open PRs.%s\n", dim, reset)
+		return
+	}
+
+	SortMyPRs(prs)
+
+	// 列幅の計算
+	maxRepo := len("REPO")
+	maxNum := len("#")
+	maxTitle := len("TITLE")
+	maxApprovals := len("APPROVALS")
+	type row struct {
+		repo      string
+		num       string
+		title     string
+		url       string
+		label     string
+		approvals string
+		ci        string
+	}
+
+	rows := make([]row, len(prs))
+	for i, pr := range prs {
+		numStr := fmt.Sprintf("#%d", pr.Number)
+		appStr := fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount)
+		rows[i] = row{
+			repo:      pr.Repo,
+			num:       numStr,
+			title:     pr.Title,
+			url:       pr.URL,
+			label:     myPRStateLabel(pr.MyReviewState),
+			approvals: appStr,
+			ci:        ciLabel(pr.CIState),
+		}
+		if w := stringWidth(pr.Repo); w > maxRepo {
+			maxRepo = w
+		}
+		if w := stringWidth(numStr); w > maxNum {
+			maxNum = w
+		}
+		if w := stringWidth(pr.Title); w > maxTitle {
+			maxTitle = w
+		}
+		if w := stringWidth(appStr); w > maxApprovals {
+			maxApprovals = w
+		}
+	}
+
+	const titleLimit = 50
+	if maxTitle > titleLimit {
+		maxTitle = titleLimit
+	}
+
+	// ヘッダー
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s",
+		padRight("REPO", maxRepo),
+		padLeft("#", maxNum),
+		padRight("TITLE", maxTitle),
+		padLeft("APPROVALS", maxApprovals),
+		"CI",
+	)
+	fmt.Printf("%s%s%s\n", bold, header, reset)
+	fmt.Println(strings.Repeat("─", stringWidth(header)))
+
+	// 各行
+	for _, r := range rows {
+		title := r.title
+		if stringWidth(title) > maxTitle {
+			title = truncate(title, maxTitle)
+		}
+		displayTitle := padRight(title, maxTitle)
+		linkedTitle := hyperlink(r.url, displayTitle)
+
+		linkedRepo := hyperlink("https://github.com/"+r.repo, padRight(r.repo, maxRepo))
+		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
+
+		fmt.Printf(" %s  %s  %s  %s  %s  %s\n",
+			r.label,
+			linkedRepo,
+			linkedNum,
+			linkedTitle,
+			padLeft(r.approvals, maxApprovals),
+			r.ci,
+		)
+	}
+}
+
 // PrintTable はコンパクトな1行テーブルで PR 一覧を表示
 func PrintTable(prs []github.PullRequest) {
 	if len(prs) == 0 {
-		fmt.Printf("%s✅ レビュー依頼されているPRはありません！%s\n", green, reset)
+		fmt.Printf("%sNo PRs to review.%s\n", dim, reset)
 		return
 	}
 

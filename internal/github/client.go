@@ -20,6 +20,8 @@ type PullRequest struct {
 	Labels        []string `json:"labels"`
 	MyReviewState string   `json:"my_review_state"`
 	CIState       string   `json:"ci_state"`
+	Approvals     int      `json:"approvals"`
+	ReviewCount   int      `json:"review_count"`
 }
 
 // Key は重複排除用の一意キー
@@ -174,6 +176,41 @@ func (c *Client) SearchReviewRequested(username string) ([]PullRequest, error) {
 	return allPRs, nil
 }
 
+// ── Search: 自分の PR ────────────────────────────────────────────────
+
+// SearchMyPRs は自分が author のオープン PR をレビュー状況付きで返す
+func (c *Client) SearchMyPRs(username string) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr is:open author:%s", username)
+
+	var allPRs []PullRequest
+	var cursor *string
+
+	for {
+		vars := map[string]interface{}{
+			"query": q,
+		}
+		if cursor != nil {
+			vars["cursor"] = *cursor
+		}
+
+		var resp searchResponse
+		if err := c.gql.Do(searchQuery, vars, &resp); err != nil {
+			return nil, fmt.Errorf("自分の PR の検索に失敗: %w", err)
+		}
+
+		for _, node := range resp.Search.Nodes {
+			allPRs = append(allPRs, nodeToMyPR(node))
+		}
+
+		if !resp.Search.PageInfo.HasNextPage {
+			break
+		}
+		cursor = &resp.Search.PageInfo.EndCursor
+	}
+
+	return allPRs, nil
+}
+
 // ── 共通変換 ────────────────────────────────────────────────────────
 
 func nodeToPR(node prNode, username string) PullRequest {
@@ -212,6 +249,78 @@ func nodeToPR(node prNode, username string) PullRequest {
 	}
 }
 
+// nodeToMyPR は自分の PR ノードを PullRequest に変換する
+// 全レビュアーのレビュー状態を集約して Approvals / ReviewCount / MyReviewState を設定
+func nodeToMyPR(node prNode) PullRequest {
+	labels := make([]string, 0, len(node.Labels.Nodes))
+	for _, l := range node.Labels.Nodes {
+		labels = append(labels, l.Name)
+	}
+
+	var ciState string
+	if len(node.Commits.Nodes) > 0 {
+		if rollup := node.Commits.Nodes[0].Commit.StatusCheckRollup; rollup != nil {
+			ciState = rollup.State
+		}
+	}
+
+	// ユーザーごとに最新レビューのみ採用
+	latestByUser := make(map[string]string)
+	for _, r := range node.Reviews.Nodes {
+		login := r.Author.Login
+		if login == "" {
+			continue
+		}
+		// author 自身のレビューは除外
+		if equalFold(login, node.Author.Login) {
+			continue
+		}
+		latestByUser[login] = r.State
+	}
+
+	approvals := 0
+	hasChangesRequested := false
+	for _, state := range latestByUser {
+		if state == "APPROVED" {
+			approvals++
+		}
+		if state == "CHANGES_REQUESTED" {
+			hasChangesRequested = true
+		}
+	}
+
+	reviewCount := len(latestByUser)
+
+	// 集約ステータス: CHANGES_REQUESTED > 未レビュー > APPROVED
+	var aggregatedState string
+	switch {
+	case hasChangesRequested:
+		aggregatedState = "CHANGES_REQUESTED"
+	case reviewCount == 0:
+		aggregatedState = "" // 未レビュー
+	case approvals == reviewCount:
+		aggregatedState = "APPROVED"
+	default:
+		aggregatedState = "" // レビュー途中
+	}
+
+	return PullRequest{
+		Repo:          node.Repository.NameWithOwner,
+		Number:        node.Number,
+		Title:         node.Title,
+		Author:        node.Author.Login,
+		URL:           node.URL,
+		CreatedAt:     node.CreatedAt,
+		UpdatedAt:     node.UpdatedAt,
+		Draft:         node.IsDraft,
+		Labels:        labels,
+		MyReviewState: aggregatedState,
+		CIState:       ciState,
+		Approvals:     approvals,
+		ReviewCount:   reviewCount,
+	}
+}
+
 // ── ヘルパー ────────────────────────────────────────────────────────
 
 func equalFold(a, b string) bool {
@@ -239,6 +348,28 @@ func ToJSON(prs []PullRequest) (string, error) {
 		prs = []PullRequest{}
 	}
 	data, err := json.MarshalIndent(prs, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// SectionsToJSON は mine/reviews セクションを JSON 文字列に変換
+func SectionsToJSON(mine, reviews []PullRequest) (string, error) {
+	if mine == nil {
+		mine = []PullRequest{}
+	}
+	if reviews == nil {
+		reviews = []PullRequest{}
+	}
+	out := struct {
+		Mine    []PullRequest `json:"mine"`
+		Reviews []PullRequest `json:"reviews"`
+	}{
+		Mine:    mine,
+		Reviews: reviews,
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return "", err
 	}
