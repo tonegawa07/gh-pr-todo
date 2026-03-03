@@ -17,8 +17,10 @@ var templateFS embed.FS
 var tmpl = template.Must(template.ParseFS(templateFS, "index.html"))
 
 type templateData struct {
-	Count int
-	PRs   []prRow
+	ShowMine    bool
+	ShowReviews bool
+	MinePRs     []prRow
+	ReviewPRs   []prRow
 }
 
 type prRow struct {
@@ -29,24 +31,29 @@ type prRow struct {
 	URL         string `json:"url"`
 	StatusEmoji string `json:"status_emoji"`
 	CIEmoji     string `json:"ci_emoji"`
+	Approvals   string `json:"approvals,omitempty"`
 }
 
-func fetchPRs(client *github.Client, username string, includeDraft bool) ([]prRow, error) {
+func filterDraft(prs []github.PullRequest, includeDraft bool) []github.PullRequest {
+	if includeDraft {
+		return prs
+	}
+	var filtered []github.PullRequest
+	for _, pr := range prs {
+		if !pr.Draft {
+			filtered = append(filtered, pr)
+		}
+	}
+	return filtered
+}
+
+func fetchReviewPRs(client *github.Client, username string, includeDraft bool) ([]prRow, error) {
 	prs, err := client.SearchReviewRequested(username)
 	if err != nil {
 		return nil, err
 	}
 
-	if !includeDraft {
-		var filtered []github.PullRequest
-		for _, pr := range prs {
-			if !pr.Draft {
-				filtered = append(filtered, pr)
-			}
-		}
-		prs = filtered
-	}
-
+	prs = filterDraft(prs, includeDraft)
 	display.SortPRs(prs)
 
 	rows := make([]prRow, len(prs))
@@ -64,6 +71,31 @@ func fetchPRs(client *github.Client, username string, includeDraft bool) ([]prRo
 	return rows, nil
 }
 
+func fetchMyPRs(client *github.Client, username string, includeDraft bool) ([]prRow, error) {
+	prs, err := client.SearchMyPRs(username)
+	if err != nil {
+		return nil, err
+	}
+
+	prs = filterDraft(prs, includeDraft)
+	display.SortMyPRs(prs)
+
+	rows := make([]prRow, len(prs))
+	for i, pr := range prs {
+		rows[i] = prRow{
+			Repo:        pr.Repo,
+			Number:      pr.Number,
+			Title:       pr.Title,
+			Author:      pr.Author,
+			URL:         pr.URL,
+			StatusEmoji: display.MyPRStateEmoji(pr.MyReviewState),
+			CIEmoji:     display.CIEmoji(pr.CIState),
+			Approvals:   fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount),
+		}
+	}
+	return rows, nil
+}
+
 // Start starts the HTTP server.
 func Start(client *github.Client, username string, includeDraft bool, port int, showMine, showReviews bool) error {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -71,23 +103,50 @@ func Start(client *github.Client, username string, includeDraft bool, port int, 
 			http.NotFound(w, r)
 			return
 		}
-		rows, err := fetchPRs(client, username, includeDraft)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		data := templateData{ShowMine: showMine, ShowReviews: showReviews}
+		if showMine {
+			rows, err := fetchMyPRs(client, username, includeDraft)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			data.MinePRs = rows
+		}
+		if showReviews {
+			rows, err := fetchReviewPRs(client, username, includeDraft)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			data.ReviewPRs = rows
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		tmpl.Execute(w, templateData{Count: len(rows), PRs: rows})
+		tmpl.Execute(w, data)
 	})
 
 	http.HandleFunc("/api/prs", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := fetchPRs(client, username, includeDraft)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		result := struct {
+			Mine    []prRow `json:"mine,omitempty"`
+			Reviews []prRow `json:"reviews,omitempty"`
+		}{}
+		if showMine {
+			rows, err := fetchMyPRs(client, username, includeDraft)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			result.Mine = rows
+		}
+		if showReviews {
+			rows, err := fetchReviewPRs(client, username, includeDraft)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			result.Reviews = rows
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(rows)
+		json.NewEncoder(w).Encode(result)
 	})
 
 	addr := fmt.Sprintf(":%d", port)
