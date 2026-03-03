@@ -237,11 +237,21 @@ func nodeToPR(node prNode, username string) PullRequest {
 		labels = append(labels, l.Name)
 	}
 
-	// 自分の最新レビュー状態を探す
+	// 自分の最新レビュー状態を探す & 承認数カウント
 	var myState string
+	latestByUser := make(map[string]string)
 	for _, r := range node.Reviews.Nodes {
 		if equalFold(r.Author.Login, username) {
 			myState = r.State
+		}
+		if r.Author.Login != "" && !equalFold(r.Author.Login, node.Author.Login) {
+			latestByUser[r.Author.Login] = r.State
+		}
+	}
+	approvals := 0
+	for _, state := range latestByUser {
+		if state == "APPROVED" {
+			approvals++
 		}
 	}
 
@@ -266,6 +276,7 @@ func nodeToPR(node prNode, username string) PullRequest {
 		Assignees:     nodeAssignees(node),
 		MyReviewState: myState,
 		CIState:       ciState,
+		Approvals:     approvals,
 	}
 }
 

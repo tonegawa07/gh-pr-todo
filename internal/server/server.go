@@ -34,7 +34,7 @@ type prRow struct {
 	Assignees   []string `json:"assignees"`
 	StatusEmoji string   `json:"status_emoji"`
 	CIEmoji     string   `json:"ci_emoji"`
-	Approvals   string   `json:"approvals,omitempty"`
+	Approvals   int      `json:"approvals"`
 }
 
 func filterDraft(prs []github.PullRequest, includeDraft bool) []github.PullRequest {
@@ -70,6 +70,7 @@ func fetchReviewPRs(client *github.Client, username string, includeDraft bool) (
 			Assignees:   pr.Assignees,
 			StatusEmoji: display.ReviewStateEmoji(pr.MyReviewState),
 			CIEmoji:     display.CIEmoji(pr.CIState),
+			Approvals:   pr.Approvals,
 		}
 	}
 	return rows, nil
@@ -95,7 +96,7 @@ func fetchMyPRs(client *github.Client, username string) ([]prRow, error) {
 			Assignees:   pr.Assignees,
 			StatusEmoji: display.MyPRStateEmoji(pr.MyReviewState),
 			CIEmoji:     display.CIEmoji(pr.CIState),
-			Approvals:   fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount),
+			Approvals:   pr.Approvals,
 		}
 	}
 	return rows, nil

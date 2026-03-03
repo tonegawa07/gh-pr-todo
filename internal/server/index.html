@@ -189,6 +189,7 @@
         <th>Title</th>
         <th>Author</th>
         <th>Assignees</th>
+        <th class="center">Approvals</th>
         <th class="center">CI</th>
       </tr>
     </thead>
@@ -201,6 +202,7 @@
         <td class="title-cell"><a href="{{.URL}}">{{.Title}}</a></td>
         <td class="author-cell"><img class="avatar" src="https://github.com/{{.Author}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.Author}}">{{.Author}}</a></td>
         <td>{{range .Assignees}}<span class="assignee"><img class="avatar" src="https://github.com/{{.}}.png?size=40" alt="" loading="lazy"><a href="https://github.com/{{.}}">{{.}}</a></span>{{end}}</td>
+        <td class="center">{{.Approvals}}</td>
         <td class="center">{{.CIEmoji}}</td>
       </tr>
       {{end}}

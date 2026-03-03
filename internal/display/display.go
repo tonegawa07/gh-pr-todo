@@ -290,7 +290,7 @@ func PrintMyPRsTable(prs []github.PullRequest) {
 	rows := make([]row, len(prs))
 	for i, pr := range prs {
 		numStr := fmt.Sprintf("#%d", pr.Number)
-		appStr := fmt.Sprintf("%d/%d", pr.Approvals, pr.ReviewCount)
+		appStr := fmt.Sprintf("%d", pr.Approvals)
 		assStr := strings.Join(pr.Assignees, ", ")
 		rows[i] = row{
 			repo:      pr.Repo,
@@ -391,6 +391,7 @@ func PrintTable(prs []github.PullRequest) {
 	maxTitle := len("TITLE")
 	maxAuthor := len("AUTHOR")
 	maxAssignees := len("ASSIGNEES")
+	maxApprovals := len("APPROVALS")
 	type row struct {
 		repo      string
 		num       string
@@ -398,6 +399,7 @@ func PrintTable(prs []github.PullRequest) {
 		url       string
 		author    string
 		assignees string
+		approvals string
 		label     string // review status emoji
 		ci        string // CI status emoji
 	}
@@ -406,6 +408,7 @@ func PrintTable(prs []github.PullRequest) {
 	for i, pr := range prs {
 		numStr := fmt.Sprintf("#%d", pr.Number)
 		assStr := strings.Join(pr.Assignees, ", ")
+		appStr := fmt.Sprintf("%d", pr.Approvals)
 		rows[i] = row{
 			repo:      pr.Repo,
 			num:       numStr,
@@ -413,6 +416,7 @@ func PrintTable(prs []github.PullRequest) {
 			url:       pr.URL,
 			author:    pr.Author,
 			assignees: assStr,
+			approvals: appStr,
 			label:     reviewStateLabel(pr.MyReviewState),
 			ci:        ciLabel(pr.CIState),
 		}
@@ -431,6 +435,9 @@ func PrintTable(prs []github.PullRequest) {
 		if w := stringWidth(assStr); w > maxAssignees {
 			maxAssignees = w
 		}
+		if w := stringWidth(appStr); w > maxApprovals {
+			maxApprovals = w
+		}
 	}
 
 	// タイトルの最大幅を制限
@@ -440,12 +447,13 @@ func PrintTable(prs []github.PullRequest) {
 	}
 
 	// ヘッダー
-	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s",
+	header := fmt.Sprintf("     %s  %s  %s  %s  %s  %s  %s",
 		padRight("REPO", maxRepo),
 		padLeft("#", maxNum),
 		padRight("TITLE", maxTitle),
 		padRight("AUTHOR", maxAuthor),
 		padRight("ASSIGNEES", maxAssignees),
+		padLeft("APPROVALS", maxApprovals),
 		"CI",
 	)
 	fmt.Printf("%s%s%s\n", bold, header, reset)
@@ -464,13 +472,14 @@ func PrintTable(prs []github.PullRequest) {
 		linkedNum := hyperlink(r.url, padLeft(r.num, maxNum))
 		linkedAuthor := hyperlink("https://github.com/"+r.author, padRight(r.author, maxAuthor))
 
-		fmt.Printf(" %s  %s  %s  %s  %s  %s  %s\n",
+		fmt.Printf(" %s  %s  %s  %s  %s  %s  %s  %s\n",
 			r.label,
 			linkedRepo,
 			linkedNum,
 			linkedTitle,
 			linkedAuthor,
 			padRight(r.assignees, maxAssignees),
+			padLeft(r.approvals, maxApprovals),
 			r.ci,
 		)
 	}
