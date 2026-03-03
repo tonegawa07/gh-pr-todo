@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"sync"
 
 	"github.com/tonegawa07/gh-pr-todo/internal/display"
 	"github.com/tonegawa07/gh-pr-todo/internal/github"
@@ -71,13 +72,12 @@ func fetchReviewPRs(client *github.Client, username string, includeDraft bool) (
 	return rows, nil
 }
 
-func fetchMyPRs(client *github.Client, username string, includeDraft bool) ([]prRow, error) {
+func fetchMyPRs(client *github.Client, username string) ([]prRow, error) {
 	prs, err := client.SearchMyPRs(username)
 	if err != nil {
 		return nil, err
 	}
 
-	prs = filterDraft(prs, includeDraft)
 	display.SortMyPRs(prs)
 
 	rows := make([]prRow, len(prs))
@@ -98,55 +98,63 @@ func fetchMyPRs(client *github.Client, username string, includeDraft bool) ([]pr
 
 // Start starts the HTTP server.
 func Start(client *github.Client, username string, includeDraft bool, port int, showMine, showReviews bool) error {
+	fetchBoth := func() (mine, reviews []prRow, err error) {
+		var wg sync.WaitGroup
+		var mineErr, reviewsErr error
+
+		if showMine {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				mine, mineErr = fetchMyPRs(client, username)
+			}()
+		}
+		if showReviews {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				reviews, reviewsErr = fetchReviewPRs(client, username, includeDraft)
+			}()
+		}
+		wg.Wait()
+
+		if mineErr != nil {
+			return nil, nil, mineErr
+		}
+		if reviewsErr != nil {
+			return nil, nil, reviewsErr
+		}
+		return mine, reviews, nil
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
-		data := templateData{ShowMine: showMine, ShowReviews: showReviews}
-		if showMine {
-			rows, err := fetchMyPRs(client, username, includeDraft)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			data.MinePRs = rows
-		}
-		if showReviews {
-			rows, err := fetchReviewPRs(client, username, includeDraft)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			data.ReviewPRs = rows
+		mine, reviews, err := fetchBoth()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		tmpl.Execute(w, data)
+		tmpl.Execute(w, templateData{
+			ShowMine: showMine, ShowReviews: showReviews,
+			MinePRs: mine, ReviewPRs: reviews,
+		})
 	})
 
 	http.HandleFunc("/api/prs", func(w http.ResponseWriter, r *http.Request) {
-		result := struct {
-			Mine    []prRow `json:"mine,omitempty"`
-			Reviews []prRow `json:"reviews,omitempty"`
-		}{}
-		if showMine {
-			rows, err := fetchMyPRs(client, username, includeDraft)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			result.Mine = rows
-		}
-		if showReviews {
-			rows, err := fetchReviewPRs(client, username, includeDraft)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			result.Reviews = rows
+		mine, reviews, err := fetchBoth()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		json.NewEncoder(w).Encode(struct {
+			Mine    []prRow `json:"mine,omitempty"`
+			Reviews []prRow `json:"reviews,omitempty"`
+		}{Mine: mine, Reviews: reviews})
 	})
 
 	addr := fmt.Sprintf(":%d", port)

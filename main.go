@@ -109,15 +109,12 @@ func run(includeDraft, jsonOutput, serve bool, port int, showMine, showReviews b
 		return server.Start(client, username, includeDraft, port, showMine, showReviews)
 	}
 
-	// ── 自分の PR 取得 ──
+	// ── 自分の PR 取得 (draft 常に含む) ──
 	var minePRs []github.PullRequest
 	if showMine {
 		minePRs, err = client.SearchMyPRs(username)
 		if err != nil {
 			return err
-		}
-		if !includeDraft {
-			minePRs = filterDraft(minePRs)
 		}
 	}
 
