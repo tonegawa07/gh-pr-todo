@@ -7,7 +7,6 @@ import (
 
 	"github.com/tonegawa07/gh-pr-todo/internal/display"
 	"github.com/tonegawa07/gh-pr-todo/internal/github"
-	"github.com/tonegawa07/gh-pr-todo/internal/server"
 )
 
 var (
@@ -29,8 +28,6 @@ func main() {
 		includeDraft bool
 		jsonOutput   bool
 		showVersion  bool
-		serve        bool
-		port         int
 		showMine     bool
 		showReviews  bool
 	)
@@ -39,9 +36,6 @@ func main() {
 	flag.BoolVar(&jsonOutput, "json", false, "JSON 形式で出力")
 	flag.BoolVar(&showVersion, "v", false, "バージョン表示")
 	flag.BoolVar(&showVersion, "version", false, "バージョン表示")
-	flag.BoolVar(&serve, "serve", false, "Web ダッシュボードを起動")
-	flag.IntVar(&port, "p", 8080, "サーバーのポート番号")
-	flag.IntVar(&port, "port", 8080, "サーバーのポート番号")
 	flag.BoolVar(&showMine, "mine", false, "自分の PR のみ表示")
 	flag.BoolVar(&showReviews, "reviews", false, "レビュー依頼された PR のみ表示")
 
@@ -56,8 +50,6 @@ FLAGS
       --reviews            レビュー依頼された PR のみ表示
       --include-draft      Draft PR も含める
       --json               JSON 形式で出力
-      --serve              Web ダッシュボードを起動
-  -p, --port               サーバーのポート番号 (デフォルト: 8080)
   -v, --version            バージョン表示
 `)
 	}
@@ -69,7 +61,7 @@ FLAGS
 		return
 	}
 
-	if err := run(includeDraft, jsonOutput, serve, port, showMine, showReviews); err != nil {
+	if err := run(includeDraft, jsonOutput, showMine, showReviews); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ %s\n", err)
 		os.Exit(1)
 	}
@@ -85,7 +77,7 @@ func filterDraft(prs []github.PullRequest) []github.PullRequest {
 	return filtered
 }
 
-func run(includeDraft, jsonOutput, serve bool, port int, showMine, showReviews bool) error {
+func run(includeDraft, jsonOutput, showMine, showReviews bool) error {
 	// 両方 false → 両方表示
 	if !showMine && !showReviews {
 		showMine = true
@@ -102,11 +94,6 @@ func run(includeDraft, jsonOutput, serve bool, port int, showMine, showReviews b
 	username, err := client.GetAuthenticatedUser()
 	if err != nil {
 		return err
-	}
-
-	// ── Web ダッシュボード ──
-	if serve {
-		return server.Start(client, username, includeDraft, port, showMine, showReviews)
 	}
 
 	// ── 自分の PR 取得 (draft 常に含む) ──
