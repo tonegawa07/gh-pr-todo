@@ -132,6 +132,8 @@ func run(includeDraft, jsonOutput, serve bool, port int, showMine, showReviews b
 
 	// ── 出力 ──
 	if jsonOutput {
+		display.SortMyPRs(minePRs)
+		display.SortPRs(reviewPRs)
 		data, err := github.SectionsToJSON(minePRs, reviewPRs)
 		if err != nil {
 			return err
